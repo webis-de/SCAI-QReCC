@@ -142,7 +142,7 @@ def load_run(input_run_file):
 # UTILITY
 
 def get_turn_id(turn):
-    return "%d_%d" % (turn["Conversation_no"], turn["Turn_no"])
+    return "%d_%d" % (int(turn["Conversation_no"]), int(turn["Turn_no"]))
 
 # STEP 1: QUESTION REWRITING
 
