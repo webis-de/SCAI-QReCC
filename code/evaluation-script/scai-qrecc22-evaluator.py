@@ -79,7 +79,8 @@ def parse_options():
         "eval-turn-one-rewrites": False,
         "rewriting": True,
         "retrieval": True,
-        "answering": True
+        "answering": True,
+        "expensive_measures": False,
     }
 
     try:
@@ -123,6 +124,9 @@ def parse_options():
 
         if opt == "--no-answering":
             options["answering"] = False
+
+        if opt == "--with-expensive-measures":
+            options["expensive-measures"] = True
 
     if not "ground-truth" in options:
         sys.exit("Missing option: --input-dataset")
@@ -236,14 +240,18 @@ def get_answering_run(run):
     return answering_run
 
 def evaluate_answering(ground_truth, run, eval_missing_truth,
-                       sas_model_name_or_path="cross-encoder/stsb-roberta-large"):
+                       sas_model_name_or_path="cross-encoder/stsb-roberta-large", compute_expensive_measures=False):
     print("Evaluate: Question Answering")
     
     answering_run = get_answering_run(run)
     metric = load_metric("squad_v2")
     metric2 = load_metric("rouge")
-    s = scorer.POSSCORE() # init POSSCORE
-    sas_model = CrossEncoder(sas_model_name_or_path)
+    s = None
+    sas_model = None
+    
+    if compute_expensive_measures:
+        s = scorer.POSSCORE() # init POSSCORE
+        sas_model = CrossEncoder(sas_model_name_or_path)
 
     result = {}
     answers = 0
@@ -270,14 +278,15 @@ def evaluate_answering(ground_truth, run, eval_missing_truth,
             
             metric2.add(prediction=prediction_text, reference=gt)
             
-            ps = s.get_posscore(gt, prediction_text)
-            if ps:
-                posscores.append(ps)
-            else:
-                posscores.append(0)
+            if compute_expensive_measures:    
+                ps = s.get_posscore(gt, prediction_text)
+                if ps:
+                    posscores.append(ps)
+                else:
+                    posscores.append(0)
 
-            sas = sas_model.predict([(prediction_text, gt)])
-            sasscores.append(sas)
+                sas = sas_model.predict([(prediction_text, gt)])
+                sasscores.append(sas)
 
     if answers > 0:
         print("    used %d answers" % answers)
@@ -287,8 +296,10 @@ def evaluate_answering(ground_truth, run, eval_missing_truth,
         result["EM"] = score['exact'] / 100
         result["F1"] = score['f1'] / 100
         result["ROUGE1-R"] = score2['rouge1'].mid.recall
-        result["POSSCORE"] = sum(posscores) / len(posscores)  # average POSSCORE
-        result["SAS"] = sum(sasscores) / len(sasscores)  # average POSSCORE
+        
+        if compute_expensive_measures:
+            result["POSSCORE"] = sum(posscores) / len(posscores)  # average POSSCORE
+            result["SAS"] = sum(sasscores) / len(sasscores)  # average POSSCORE
     else:
         print("    skipped for no answers")
     return result
@@ -301,14 +312,14 @@ def has_model_rewrites(run):
             return True
     return False
 
-def evaluate(ground_truth, run, eval_missing_truth = False, eval_turn_one_rewrites = False, rewriting = True, retrieval = True, answering = True):
+def evaluate(ground_truth, run, eval_missing_truth = False, eval_turn_one_rewrites = False, rewriting = True, retrieval = True, answering = True, expensive_measures=False):
     results = {}
     if rewriting:
         results.update(evaluate_rewriting(ground_truth, run, eval_missing_truth, eval_turn_one_rewrites))
     if retrieval:
         results.update(evaluate_retrieval(ground_truth, run, eval_missing_truth))
     if answering:
-        results.update(evaluate_answering(ground_truth, run, eval_missing_truth))
+        results.update(evaluate_answering(ground_truth, run, eval_missing_truth, expensive_measures))
     return results
 
 # MAIN
@@ -326,7 +337,8 @@ def main(options):
             eval_turn_one_rewrites = options["eval-turn-one-rewrites"],
             rewriting = options["rewriting"],
             retrieval = options["retrieval"],
-            answering = options["answering"])
+            answering = options["answering"],
+            expensive_measures = options["expensive-measures"])
     results_string = sprint_results(results, options["digits"])
     print(results_string)
     with open(options["output-file-name"], "w") as output_file:
