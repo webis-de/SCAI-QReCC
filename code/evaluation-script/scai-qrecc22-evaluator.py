@@ -80,7 +80,7 @@ def parse_options():
         "rewriting": True,
         "retrieval": True,
         "answering": True,
-        "expensive_measures": False,
+        "expensive-measures": False,
     }
 
     try:
